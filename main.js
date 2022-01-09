@@ -46,13 +46,9 @@ function init()
 
 	transform = new TransformData();
 
-	transform.position.x = 1;
-	transform.position.y = 3;
-	transform.position.z = 5;
-
-	transform.scale.x = 2;
-	transform.scale.y = 4;
-	transform.scale.z = 8;
+	transform.position.x = 0;
+	transform.position.y = 0;
+	transform.position.z = -2;
 
 	transform.updateMatrix(false);
 }
@@ -62,6 +58,12 @@ function render()
 	rc = new RenderCache();
 
 	appendGameObject(rc, basicSquare, transform, camera);
+
+	transform.position.z = -3;
+	transform.position.x = 0.5;
+
+	transform.updateMatrix(false);
+
 	appendGameObject(rc, basicSquare, transform, camera);
 
 	prepareFrame(rc, perspectiveMatrix);

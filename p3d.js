@@ -1,3 +1,9 @@
+/*
+
+There is no rhyme or reason to the order of these functions.
+
+*/
+
 var MatrixUtils = {
 	getIdentity: function()
 	{
@@ -158,6 +164,19 @@ function TriangleData(vertices, normals, mesh)//maybe it's a bad idea to have an
 	this.vertices = vertices;
 	this.normals = normals;
 	this.mesh = mesh;
+
+	this.midpointZ = undefined;
+}
+
+function RenderTriangleData(p1, p2, p3, h, s, v)
+{
+	this.p1 = p1;
+	this.p2 = p2;
+	this.p3 = p3;
+
+	this.h = h;
+	this.s = s;
+	this.v = v;
 }
 
 function appendMeshData(m)
@@ -264,6 +283,8 @@ function appendGameObject(rc, mesh, td, camera)
 			mesh
 		);
 
+		triangle.midpointZ = (rc.vertices[triangle.vertices[0] + 2] + rc.vertices[triangle.vertices[1] + 2] + rc.vertices[triangle.vertices[2] + 2]) / 3;
+
 		rc.triangles.push(triangle);
 	}
 }
@@ -283,32 +304,35 @@ function prepareFrame(rc, proj)
 		rc.sortedTriangles.push(i);
 	}
 
-	//step 2: Calculate all triangle midpoints
+	//step 2: Sort every single triangle back to front
 
-	var midpoints = [];//3 floats * 3 indices
-	midpoints.length = rc.sortedTriangles.length * 3;
+	triangle_quicksort(rc.sortedTriangles, 0, rc.sortedTriangles.length-1, rc.triangles);
+
+	//step 3: Generate 2D Triangles
 
 	for (var i = 0; i < rc.sortedTriangles.length; i++)
 	{
-		//vertex data[vertex pointer in triangle obj[triangle pointer in sortedTriangles] plus offset]
-
-		//rc.vertices[rc.triangles[which triangle?].vertices[which vertex in that triangle?]]
-
 		var triangle = rc.triangles[rc.sortedTriangles[i]];
 
-		var a = [
-			rc.vertices[triangle.vertices[0] + 0],
-			rc.vertices[triangle.vertices[0] + 1],
-			rc.vertices[triangle.vertices[0] + 2]
-		];
+		var vertexA_4f = [rc.vertices[triangle.vertices[0] + 0], rc.vertices[triangle.vertices[0] + 1], rc.vertices[triangle.vertices[0] + 2], 1];
+		var vertexB_4f = [rc.vertices[triangle.vertices[1] + 0], rc.vertices[triangle.vertices[1] + 1], rc.vertices[triangle.vertices[1] + 2], 1];
+		var vertexC_4f = [rc.vertices[triangle.vertices[2] + 0], rc.vertices[triangle.vertices[2] + 1], rc.vertices[triangle.vertices[2] + 2], 1];
 
-		console.log([a]);
+		if (vertexA_4f[2] <= 0 || vertexB_4f[2] <= 0 || vertexC_4f[2] <= 0) {}//Might eventually implement a line projection solution to negative values.
+		if (rc.normals[triangle.normals + 2] <= 0) {}//if the triangle is facing away from the camera, omit it
+		else
+		{
+			vertexA_4f = MatrixUtils.vertmult(vertexA_4f, proj);
+			vertexB_4f = MatrixUtils.vertmult(vertexB_4f, proj);
+			vertexC_4f = MatrixUtils.vertmult(vertexC_4f, proj);
+
+			var vertexA_2f = [vertexA_4f[0] / vertexA_4f[2], vertexA_4f[1] / vertexA_4f[2]];
+			var vertexB_2f = [vertexB_4f[0] / vertexB_4f[2], vertexB_4f[1] / vertexB_4f[2]];
+			var vertexC_2f = [vertexC_4f[0] / vertexC_4f[2], vertexC_4f[1] / vertexC_4f[2]];
+
+			var color = global_meshDatabank[triangle.mesh].materials[???];//how does it know which material to select?
+		}
 	}
-	
-
-	//step 3: Sort every single triangle back to front
-
-	triangle_quicksort(rc.sortedTriangles, 0, rc.sortedTriangles.length-1);
 }
 
 /**
@@ -317,12 +341,21 @@ function prepareFrame(rc, proj)
  * @param {Number} a Index of first object in array
  * @param {Number} b Index of second object in array
  */
-function sort_swap(arr, a, b)
+function sort_swap(arr, a, b, data)
 {
 	var n = arr[b];
 	arr[b] = arr[a];
 	arr[a] = n;
 }
+
+/**
+ * 
+ * @param {Array} arr 
+ * @param {Integer} start 
+ * @param {Integer} end 
+ * @param {RenderCache.triangles} data Reference to the triangles array in the rc.
+ * @returns 
+ */
 
 function triangle_quicksort(arr, start, end, data)
 {
@@ -333,10 +366,19 @@ function triangle_quicksort(arr, start, end, data)
 
 	var index = start;
 
-	
+	for (var i = start; i < end; i++)
+	{
+		if (data[arr[i]].midpointZ < data[pivotValue].midpointZ)
+		{
+			sort_swap(arr, index, i, data);
+			index = i;
+		}
+	}
 
-	triangle_quicksort(arr, start, index - 1);
-	triangle_quicksort(arr, index + 1, end);
+	sort_swap(arr, index, end, data);
+
+	triangle_quicksort(arr, start, index - 1, data);
+	triangle_quicksort(arr, index + 1, end, data);
 }
 
 function TransformData()
