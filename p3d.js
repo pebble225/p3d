@@ -83,7 +83,7 @@ var MatrixUtils = {
 
 		return m;
 	},
-	vertmult: function(vec, mat)//I will manually add in a fourth element, but this is a workaround.
+	vertmult: function(vec, mat)//I will manually add in a fourth element, but this is a workaround. The function will take in a vec3 and return a vec4
 	{
 		var vec2 = [vec[0], vec[1], vec[2], 1];
 
@@ -112,77 +112,7 @@ var MatrixUtils = {
 	}
 };
 
-//
-
-/**
- * Converts an RGB color value to HSL. Conversion formula
- * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
- * Assumes r, g, and b are contained in the set [0, 255] and
- * returns h, s, and l in the set [0, 1].
- *
- * @param   {Number}  r       The red color value
- * @param   {Number}  g       The green color value
- * @param   {Number}  b       The blue color value
- * @return  {Array}           The HSL representation
- */
- function rgbToHsl(r, g, b){
-    r /= 255, g /= 255, b /= 255;
-    var max = Math.max(r, g, b), min = Math.min(r, g, b);
-    var h, s, l = (max + min) / 2;
-
-    if(max == min){
-        h = s = 0; // achromatic
-    }else{
-        var d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch(max){
-            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-            case g: h = (b - r) / d + 2; break;
-            case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-    }
-
-    return [h, s, l];
-}
-
-/**
- * Converts an HSL color value to RGB. Conversion formula
- * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
- * Assumes h, s, and l are contained in the set [0, 1] and
- * returns r, g, and b in the set [0, 255].
- *
- * @param   {Number}  h       The hue
- * @param   {Number}  s       The saturation
- * @param   {Number}  l       The lightness
- * @return  {Array}           The RGB representation
- */
-function hslToRgb(h, s, l){
-    var r, g, b;
-
-    if(s == 0){
-        r = g = b = l; // achromatic
-    }else{
-        function hue2rgb(p, q, t){
-            if(t < 0) t += 1;
-            if(t > 1) t -= 1;
-            if(t < 1/6) return p + (q - p) * 6 * t;
-            if(t < 1/2) return q;
-            if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-            return p;
-        }
-
-        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        var p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1/3);
-    }
-
-    return [r * 255, g * 255, b * 255];
-}
-
-function Material_HSL(h,s,l)
+function Material_HSL(h,s,l)//g.fillStyle = "hsl(H,S%,L%)";
 {
 	this.h = h;
 	this.s = s;
@@ -197,33 +127,31 @@ function appendIndex(arr, element)
 }
 
 function RenderCache()
-{
-	this.vertices = [];//remember to offset by 3 for vertices, normals, and colors
-	this.normals = [];
-	this.triangles = [];
-	this.colors = [];
+{//						for every triangle that is added, the following ratio should be observed:
+	this.vertices = [];//3 vertices
+	this.normals = [];//1 normal
+	this.triangles = [];//1 TriangleData Object
 	
-	this.sortedTriangles = [];
-	this.renderedTriangles = [];
+	this.sortedTriangles = [];//1 pointer
+	this.renderedTriangles = [];//1 2D triangle
 }
 
 var global_meshDatabank = [];
 var global_materialDatabank = [];
 
-function MeshData(vertices, indices, normals, colors)
-{
-	this.vertices = vertices;
-	this.indices = indices;
-	this.normals = normals;
-	this.colors = colors;
+function MeshData(vertices, indices, normals, materials)
+{//						for every triangle that is added, the following ratio should be observed:
+	this.vertices = vertices;//3 vertices(9 floats)
+	this.indices = indices;//1 index(3 integers)
+	this.normals = normals;//1 normal(3 floats)
+	this.materials = materials;//1 material pointer(1 integer)
 }
 
-function TriangleData(vertices, normals, color, mesh)//maybe it's a bad idea to have an abstraction for this too :/
+function TriangleData(vertices, normals, mesh)//maybe it's a bad idea to have an abstraction for this too :/
 {
 	//all of the values stored here should be pointers
 	this.vertices = vertices;
 	this.normals = normals;
-	this.color = color;
 	this.mesh = mesh;
 }
 
@@ -232,7 +160,7 @@ function appendMeshData(m)
 	return appendIndex(global_meshDatabank, m);
 }
 
-function appendMaterial_HSV(m)
+function appendMaterial(m)
 {
 	return appendIndex(global_materialDatabank, m);
 }
@@ -250,18 +178,17 @@ function appendGameObject(rc, mesh, td, camera)
 	//multiply the Object Transform with the Camera Transform
 	var transformMatrix = MatrixUtils.matmult(td.m, camera);
 
-	//initialize an array for vertex pointers
+	//initialize an array for a pointer array to transformed vertices
 	var vertices_p = [];//vertex pointers will come in sets of three
-	//the indices(EBO) will treat vertices_p as if they are the vertices, but when retrieving the vertices, the triangle will use the pointer to find the correct pointer in vertices_p in order retrieve the vertex data stored in rc.vertices
+	//the indices (i.e. EBO) will treat vertices_p as if they are the vertices, but when retrieving the vertices, the triangle will use the pointer to find the correct pointer in vertices_p in order retrieve the vertex data stored in rc.vertices
 
 	var normals_p = [];
-	var colors_p = [];
 
 	for (var i = 0; i < global_meshDatabank[mesh].vertices.length; i += 3)
 	{
 		//vertex is bundled into a group of three in order to multiply with the matrix
 		var vertex = [global_meshDatabank[mesh].vertices[i], global_meshDatabank[mesh].vertices[i + 1], global_meshDatabank[mesh].vertices[i + 2]];
-
+		
 		vertex = MatrixUtils.vertmult(vertex, transformMatrix);
 
 		//vertex is then decoupled in order to store the vertex data in rc and retrieve the pointer to store in vertices_p
@@ -286,21 +213,11 @@ function appendGameObject(rc, mesh, td, camera)
 		}
 	}
 
-	if (global_meshDatabank[mesh].colors != undefined)
-	{
-		for (var i = 0; i < global_meshDatabank[mesh].normals.length; i += 3)
-		{
-			colors_p.push(appendIndex(rc.colors, global_meshDatabank[mesh].colors[i]));
-			colors_p.push(appendIndex(rc.colors, global_meshDatabank[mesh].colors[i + 1]));
-			colors_p.push(appendIndex(rc.colors, global_meshDatabank[mesh].colors[i + 2]));
-		}
-	}
-
 	for (var i = 0; i < global_meshDatabank[mesh].indices.length; i += 3)
 	{
 		//triangles are defined as three vertices. The indices will be used as a guide in order to create the triangles
 		//for every set of three values for the index, there will/should be a corresponding set of three values for a normal
-		//THEREFORE indices, normals, and colors should always be the same length
+		//THEREFORE indices and normals should always be the same length
 
 		var triangleVertices_p = [
 			vertices_p[global_meshDatabank[mesh].indices[i]],
@@ -310,7 +227,6 @@ function appendGameObject(rc, mesh, td, camera)
 
 		/*
 		
-		I want to make sure this is as clear as possible.
 		The idea in order to make this run efficiently is that there should always only be one instance of each vertex and triangle of a mesh.
 		In order to accomplish this, all of the vertices are processed front to back. This creates complications when tryng to define the triangles
 		so this is the current workaround.
@@ -329,12 +245,6 @@ function appendGameObject(rc, mesh, td, camera)
 			normals_p[i + 1],
 			normals_p[i + 2]
 		];
-
-		var triangleColors_p = [
-			colors_p[i],
-			colors_p[i + 1],
-			colors_p[i + 2]
-		];
 		
 		/*
 		
@@ -346,9 +256,10 @@ function appendGameObject(rc, mesh, td, camera)
 		var triangle = new TriangleData(
 			triangleVertices_p,
 			triangleNormals_p,
-			triangleColors_p,
 			mesh
 		);
+
+		rc.triangles.push(triangle);
 	}
 }
 
