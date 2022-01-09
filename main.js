@@ -4,7 +4,9 @@ var g = display.getContext("2d");
 var basicTriangle;
 var basicSquare;
 var camera;
-var transform
+var transform;
+
+var perspectiveMatrix;
 
 var rc;
 
@@ -39,6 +41,9 @@ function init()
 
 	camera = MatrixUtils.getIdentity();
 
+	perspectiveMatrix = MatrixUtils.getIdentity();
+	perspectiveMatrix = MatrixUtils.matmult(perspectiveMatrix, MatrixUtils.getPerspective(100));
+
 	transform = new TransformData();
 
 	transform.position.x = 1;
@@ -58,6 +63,8 @@ function render()
 
 	appendGameObject(rc, basicSquare, transform, camera);
 	appendGameObject(rc, basicSquare, transform, camera);
+
+	prepareFrame(rc, perspectiveMatrix);
 }
 
 init();

@@ -85,9 +85,14 @@ var MatrixUtils = {
 	},
 	vertmult: function(vec, mat)//I will manually add in a fourth element, but this is a workaround. The function will take in a vec3 and return a vec4
 	{
-		var vec2 = [vec[0], vec[1], vec[2], 1];
+		if (vec.length < 4)
+		{
+			console.error("Incorrect vertex length.");
+			return
+		}
 
-		var out = Array(4);
+		var out = [];
+		out.length = 4;
 
 		for (var y = 0; y < 4; y++)
 		{
@@ -95,7 +100,7 @@ var MatrixUtils = {
 			
 			for (var x = 0; x < 4; x++)
 			{
-				sum += vec2[x] * mat[4 * x + y];
+				sum += vec[x] * mat[4 * y + x];
 			}
 
 			out[y] = sum;
@@ -133,7 +138,7 @@ function RenderCache()
 	this.triangles = [];//1 TriangleData Object
 	
 	this.sortedTriangles = [];//1 pointer
-	this.renderedTriangles = [];//1 2D triangle
+	this.renderedTriangles = [];//1 2D triangle Object
 }
 
 var global_meshDatabank = [];
@@ -187,14 +192,16 @@ function appendGameObject(rc, mesh, td, camera)
 	for (var i = 0; i < global_meshDatabank[mesh].vertices.length; i += 3)
 	{
 		//vertex is bundled into a group of three in order to multiply with the matrix
-		var vertex = [global_meshDatabank[mesh].vertices[i], global_meshDatabank[mesh].vertices[i + 1], global_meshDatabank[mesh].vertices[i + 2]];
-		
+		var vertex = [global_meshDatabank[mesh].vertices[i], global_meshDatabank[mesh].vertices[i + 1], global_meshDatabank[mesh].vertices[i + 2], 1];
+
 		vertex = MatrixUtils.vertmult(vertex, transformMatrix);
 
 		//vertex is then decoupled in order to store the vertex data in rc and retrieve the pointer to store in vertices_p
 		vertices_p.push(appendIndex(rc.vertices, vertex[0]));
-		vertices_p.push(appendIndex(rc.vertices, vertex[1]));
-		vertices_p.push(appendIndex(rc.vertices, vertex[2]));
+		vertices_p.push(appendIndex(rc.vertices, vertex[1]));//this pointer is never used.
+		vertices_p.push(appendIndex(rc.vertices, vertex[2]));//this pointer is never used.
+
+		//vertices_p is bloated with 2 unused pointers for each vertex. Something to keep in mind.
 
 		//all of the vertices have been transformed to their correct positions relative to the camera and stored in rc.vertices
 	}
@@ -203,13 +210,13 @@ function appendGameObject(rc, mesh, td, camera)
 	{
 		for (var i = 0; i < global_meshDatabank[mesh].normals.length; i += 3)
 		{
-			var normal = [global_meshDatabank[mesh].normals[i], global_meshDatabank[mesh].normals[i + 1], global_meshDatabank[mesh].normals[i + 2]];
+			var normal = [global_meshDatabank[mesh].normals[i], global_meshDatabank[mesh].normals[i + 1], global_meshDatabank[mesh].normals[i + 2], 1];
 
 			normal = MatrixUtils.vertmult(normal, td.nm);
 
-			normals_p.push(appendIndex(rc.normals, normal[0]));//same thing that's happening with the vertices is happening here
-			normals_p.push(appendIndex(rc.normals, normal[1]));
-			normals_p.push(appendIndex(rc.normals, normal[2]));
+			normals_p.push(appendIndex(rc.normals, normal[0]));
+			normals_p.push(appendIndex(rc.normals, normal[1]));//this pointer is never used.
+			normals_p.push(appendIndex(rc.normals, normal[2]));//this pointer is never used.
 		}
 	}
 
@@ -219,10 +226,12 @@ function appendGameObject(rc, mesh, td, camera)
 		//for every set of three values for the index, there will/should be a corresponding set of three values for a normal
 		//THEREFORE indices and normals should always be the same length
 
+		//triangleVertices_p has the EXACT address of the vertex in rc.vertices. It is not the same as index.
+
 		var triangleVertices_p = [
-			vertices_p[global_meshDatabank[mesh].indices[i]],
-			vertices_p[global_meshDatabank[mesh].indices[i + 1]],
-			vertices_p[global_meshDatabank[mesh].indices[i + 2]]
+			vertices_p[global_meshDatabank[mesh].indices[i] * 3],
+			vertices_p[global_meshDatabank[mesh].indices[i + 1] * 3],
+			vertices_p[global_meshDatabank[mesh].indices[i + 2] * 3]
 		];
 
 		/*
@@ -240,11 +249,7 @@ function appendGameObject(rc, mesh, td, camera)
 
 		*/
 
-		var triangleNormals_p = [
-			normals_p[i],
-			normals_p[i + 1],
-			normals_p[i + 2]
-		];
+		var triangleNormal_p = normals_p[i];
 		
 		/*
 		
@@ -255,7 +260,7 @@ function appendGameObject(rc, mesh, td, camera)
 
 		var triangle = new TriangleData(
 			triangleVertices_p,
-			triangleNormals_p,
+			triangleNormal_p,
 			mesh
 		);
 
@@ -271,7 +276,67 @@ function appendGameObject(rc, mesh, td, camera)
 
 function prepareFrame(rc, proj)
 {
+	//step 1: Prepare sortedTriangles array
 
+	for (var i = 0; i < rc.triangles.length; i++)
+	{
+		rc.sortedTriangles.push(i);
+	}
+
+	//step 2: Calculate all triangle midpoints
+
+	var midpoints = [];//3 floats * 3 indices
+	midpoints.length = rc.sortedTriangles.length * 3;
+
+	for (var i = 0; i < rc.sortedTriangles.length; i++)
+	{
+		//vertex data[vertex pointer in triangle obj[triangle pointer in sortedTriangles] plus offset]
+
+		//rc.vertices[rc.triangles[which triangle?].vertices[which vertex in that triangle?]]
+
+		var triangle = rc.triangles[rc.sortedTriangles[i]];
+
+		var a = [
+			rc.vertices[triangle.vertices[0] + 0],
+			rc.vertices[triangle.vertices[0] + 1],
+			rc.vertices[triangle.vertices[0] + 2]
+		];
+
+		console.log([a]);
+	}
+	
+
+	//step 3: Sort every single triangle back to front
+
+	triangle_quicksort(rc.sortedTriangles, 0, rc.sortedTriangles.length-1);
+}
+
+/**
+ * 
+ * @param {Array} arr The array in question
+ * @param {Number} a Index of first object in array
+ * @param {Number} b Index of second object in array
+ */
+function sort_swap(arr, a, b)
+{
+	var n = arr[b];
+	arr[b] = arr[a];
+	arr[a] = n;
+}
+
+function triangle_quicksort(arr, start, end, data)
+{
+	if (start >= end)
+		return;
+	
+	var pivotValue = arr[end];
+
+	var index = start;
+
+	
+
+	triangle_quicksort(arr, start, index - 1);
+	triangle_quicksort(arr, index + 1, end);
 }
 
 function TransformData()
